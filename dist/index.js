@@ -32,53 +32,63 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const web3 = __importStar(require("@solana/web3.js"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
-// Tracked Wallets
+// const SOLANA_RPC_ENDPOINT =
+//   process.env.SOLANA_RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
+const HELIUS_API_KEY = process.env.HELIUS_RPC_KEY || "";
+const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 const TRACKED_WALLETS = [
-    "GY3AxLwJtXMKEcs6iRauT4C6oPtivjjhRQjtAxtWeNx9",
-    "4zq1iLpmepj2Rj7W6A3XQMRQA1HyjYqVpZiBzM6aPyH7",
+    //   "GY3AxLwJtXMKEcs6iRauT4C6oPtivjjhRQjtAxtWeNx9",
+    //   "4zq1iLpmepj2Rj7W6A3XQMRQA1HyjYqVpZiBzM6aPyH7",
+    "DJm944mMLK17hjrDQ9tHiCdxZjAiXUyqC43Vsh1UirAE",
 ];
 class WalletTracker {
     constructor() {
-        this.connection = new web3.Connection(SOLANA_RPC_ENDPOINT, "confirmed");
+        if (!HELIUS_API_KEY) {
+            throw new Error("HELIUS_API_KEY is required");
+        }
     }
-    startTracking() {
+    getWalletAssets(walletAddress) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log("Stalkr Initialized, scanning...");
-            for (const wallet of TRACKED_WALLETS) {
-                const pubkey = new web3.PublicKey(wallet);
-                this.connection.onLogs(pubkey, (logs, context) => {
-                    this.handleTransaction(wallet, logs, context);
-                }, "confirmed");
-                console.log(`Targeting: ${wallet}`);
+            try {
+                const response = yield fetch(HELIUS_RPC_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: "2.0",
+                        id: "my-id",
+                        method: "getAssetsByOwner",
+                        params: {
+                            ownerAddress: walletAddress,
+                            page: 1,
+                            limit: 1000,
+                            displayOptions: {
+                                showFungible: true,
+                            },
+                        },
+                    }),
+                });
+                const { result } = yield response.json();
+                console.log(`\nAssets for wallet ${walletAddress}:`);
+                console.log(JSON.stringify(result.items, null, 2));
+                return result.items;
+            }
+            catch (error) {
+                console.error(`Error fetching assets for walelt ${walletAddress}`);
+                return [];
             }
         });
     }
-    handleTransaction(wallet, logs, context) {
+    startTracking() {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            console.log(`\n New trasaction for wallet: ${wallet}`);
-            // console.log(`Signature: ${context.signature}`);
-            console.log(`Slot: ${context.slot}`);
-            console.log("Logs: ", logs);
-            logs.logs.forEach((log) => console.log(log));
-            try {
-                const transaction = yield this.connection.getTransaction(logs.signature, {
-                    maxSupportedTransactionVersion: 0,
-                });
-                if (transaction && transaction.meta) {
-                    const preBalance = transaction.meta.preBalances[0] || 0;
-                    const postBalance = transaction.meta.postBalances[0] || 0;
-                    console.log(`Amount: ${((_a = transaction.meta) === null || _a === void 0 ? void 0 : _a.postBalances[0]) - ((_b = transaction.meta) === null || _b === void 0 ? void 0 : _b.preBalances[0])} lamports`);
-                }
+            console.log("Stalkr Ready, scanning...");
+            for (const wallet of TRACKED_WALLETS) {
+                console.log(`Tracking: ${wallet}`);
+                yield this.getWalletAssets(wallet);
             }
-            catch (error) {
-                console.error("Error fetching transaction details:", error);
-            }
-            console.log("----------------------------------------");
         });
     }
 }
